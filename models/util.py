@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 
+
 # ******** CRF 工具函数*************
 
 
@@ -30,7 +31,27 @@ def sent2features(sent):
 
 # ******** LSTM模型 工具函数*************
 
-def tensorized(batch, maps):
+def tensorized(batch):
+    # PAD = maps.get('<pad>')
+    # UNK = maps.get('<unk>')
+    #
+    # max_len = len(batch[0])
+    # batch_size = len(batch)
+    #
+    # batch_tensor = torch.ones(batch_size, max_len).long() * PAD
+    # for i, l in enumerate(batch):
+    #     for j, e in enumerate(l):
+    #         batch_tensor[i][j] = maps.get(e, UNK)
+    # # batch各个元素的长度
+    # lengths = [len(l) for l in batch]
+    #
+    # return batch_tensor, lengths
+    lengths = [len(l) for l in batch]
+    for i, l in enumerate(batch):
+        batch[i] = l.join("")
+    return batch, lengths
+
+def tensorized_unmod(batch, maps):
     PAD = maps.get('<pad>')
     UNK = maps.get('<unk>')
 

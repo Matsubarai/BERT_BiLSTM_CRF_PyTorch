@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
+from transformers import BertModel
+
 
 
 class BiLSTM(nn.Module):
@@ -12,7 +14,7 @@ class BiLSTM(nn.Module):
             out_size:标注的种类
         """
         super(BiLSTM, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, emb_size)
+        self.embedding = BertModel.from_pretrained("hfl/chinese-roberta-wwm-ext")
         self.bilstm = nn.LSTM(emb_size, hidden_size,
                               batch_first=True,
                               bidirectional=True)
@@ -20,7 +22,7 @@ class BiLSTM(nn.Module):
         self.lin = nn.Linear(2*hidden_size, out_size)
 
     def forward(self, sents_tensor, lengths):
-        emb = self.embedding(sents_tensor)  # [B, L, emb_size]
+        emb = self.embedding(sents_tensor)[0]  # [B, L, emb_size]
 
         packed = pack_padded_sequence(emb, lengths, batch_first=True)
         rnn_out, _ = self.bilstm(packed)

@@ -5,9 +5,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from .util import tensorized, sort_by_lengths, cal_loss, cal_lstm_crf_loss
+from .util import tensorized, sort_by_lengths, cal_loss, cal_lstm_crf_loss, tensorized_unmod
 from .config import TrainingConfig, LSTMConfig
 from .bilstm import BiLSTM
+from transformers import BertTokenizer
 
 
 class BILSTM_Model(object):
@@ -25,6 +26,8 @@ class BILSTM_Model(object):
         self.hidden_size = LSTMConfig.hidden_size
 
         self.crf = crf
+        self.tn = BertTokenizer.from_pretrained("hfl/chinese-roberta-wwm-ext")
+
         # 根据是否添加crf初始化不同的模型 选择不一样的损失计算函数
         if not crf:
             self.model = BiLSTM(vocab_size, self.emb_size,
@@ -83,12 +86,15 @@ class BILSTM_Model(object):
             print("Epoch {}, Val Loss:{:.4f}".format(e, val_loss))
 
     def train_step(self, batch_sents, batch_tags, word2id, tag2id):
+        self.model.bilstm.embedding.train()
         self.model.train()
         self.step += 1
+
         # 准备数据
-        tensorized_sents, lengths = tensorized(batch_sents, word2id)
-        tensorized_sents = tensorized_sents.to(self.device)
-        targets, lengths = tensorized(batch_tags, tag2id)
+        tensorized_sents, lengths = tensorized(batch_sents)
+        tensorized_sents = self.tn(tensorized_sents, padding=True, return_tensors="pt")['input_ids'].to(self.device)
+
+        targets, lengths = tensorized_unmod(batch_tags, tag2id)
         targets = targets.to(self.device)
 
         # forward
@@ -103,6 +109,7 @@ class BILSTM_Model(object):
         return loss.item()
 
     def validate(self, dev_word_lists, dev_tag_lists, word2id, tag2id):
+        self.model.bilstm.embedding.eval()
         self.model.eval()
         with torch.no_grad():
             val_losses = 0.
@@ -112,10 +119,9 @@ class BILSTM_Model(object):
                 # 准备batch数据
                 batch_sents = dev_word_lists[ind:ind+self.batch_size]
                 batch_tags = dev_tag_lists[ind:ind+self.batch_size]
-                tensorized_sents, lengths = tensorized(
-                    batch_sents, word2id)
-                tensorized_sents = tensorized_sents.to(self.device)
-                targets, lengths = tensorized(batch_tags, tag2id)
+                tensorized_sents, lengths = tensorized(batch_sents)
+                tensorized_sents = self.tn(tensorized_sents, padding=True, return_tensors="pt")['input_ids'].to(self.device)
+                targets, lengths = tensorized_unmod(batch_tags, tag2id)
                 targets = targets.to(self.device)
 
                 # forward
@@ -138,8 +144,8 @@ class BILSTM_Model(object):
         """返回最佳模型在测试集上的预测结果"""
         # 准备数据
         word_lists, tag_lists, indices = sort_by_lengths(word_lists, tag_lists)
-        tensorized_sents, lengths = tensorized(word_lists, word2id)
-        tensorized_sents = tensorized_sents.to(self.device)
+        tensorized_sents, lengths = tensorized(word_lists)
+        tensorized_sents = self.tn(tensorized_sents, padding=True, return_tensors="pt")['input_ids'].to(self.device)
 
         self.best_model.eval()
         with torch.no_grad():
